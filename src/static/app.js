@@ -44,9 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const participants = Array.isArray(details.participants) ? details.participants : [];
         const participantsHtml = participants.length
           ? participants.map(p => {
-              return `<li><span class="avatar">${escapeHtml(getInitials(p))}</span><span class="participant-name">${escapeHtml(p)}</span></li>`;
+              return `<li data-email="${escapeHtml(p)}"><span class="avatar">${escapeHtml(getInitials(p))}</span><span class="participant-name">${escapeHtml(p)}</span><button class="delete-participant" title="Verwijder deelnemer" aria-label="Verwijder deelnemer">🗑️</button></li>`;
             }).join("")
-          : `<li class="muted">No participants yet</li>`;
+          : `<li class=\"muted\">No participants yet</li>`;
 
         activityCard.innerHTML = `
           <h4>${escapeHtml(name)}</h4>
@@ -61,6 +61,30 @@ document.addEventListener("DOMContentLoaded", () => {
             </ul>
           </div>
         `;
+
+        // Voeg event listeners toe voor delete-knoppen
+        const ul = activityCard.querySelector('.participants-list');
+        ul.querySelectorAll('.delete-participant').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const li = btn.closest('li');
+            const email = li.getAttribute('data-email');
+            if (!email) return;
+            if (!confirm('Weet je zeker dat je deze deelnemer wilt verwijderen?')) return;
+            try {
+              const response = await fetch(`/activities/${encodeURIComponent(name)}/unregister?email=${encodeURIComponent(email)}`, {
+                method: 'DELETE',
+              });
+              const result = await response.json();
+              if (response.ok) {
+                fetchActivities(); // Refresh activities list
+              } else {
+                alert(result.detail || 'Kon deelnemer niet verwijderen.');
+              }
+            } catch (err) {
+              alert('Fout bij verwijderen deelnemer.');
+            }
+          });
+        });
 
         activitiesList.appendChild(activityCard);
 
@@ -97,6 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        fetchActivities(); // Refresh activities list
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
