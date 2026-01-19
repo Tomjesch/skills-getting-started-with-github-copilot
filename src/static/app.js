@@ -4,6 +4,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // veilige HTML escape
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  // eenvoudige initialen uit naam of e-mail halen
+  function getInitials(nameOrEmail) {
+    const s = String(nameOrEmail || "");
+    const namePart = s.split("@")[0].replace(/[\._\-]+/g, " ");
+    const parts = namePart.trim().split(/\s+/);
+    if (parts.length === 0) return "";
+    if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+    return (parts[0].slice(0,1) + parts[parts.length-1].slice(0,1)).toUpperCase();
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -20,12 +40,51 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // build participants list HTML
+        const participants = Array.isArray(details.participants) ? details.participants : [];
+        const participantsHtml = participants.length
+          ? participants.map(p => {
+              return `<li data-email="${escapeHtml(p)}"><span class="avatar">${escapeHtml(getInitials(p))}</span><span class="participant-name">${escapeHtml(p)}</span><button class="delete-participant" title="Verwijder deelnemer" aria-label="Verwijder deelnemer">🗑️</button></li>`;
+            }).join("")
+          : `<li class=\"muted\">No participants yet</li>`;
+
         activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
+          <h4>${escapeHtml(name)}</h4>
+          <p>${escapeHtml(details.description)}</p>
+          <p><strong>Schedule:</strong> ${escapeHtml(details.schedule)}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+
+          <div class="participants">
+            <h5>Participants</h5>
+            <ul class="participants-list">
+              ${participantsHtml}
+            </ul>
+          </div>
         `;
+
+        // Voeg event listeners toe voor delete-knoppen
+        const ul = activityCard.querySelector('.participants-list');
+        ul.querySelectorAll('.delete-participant').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const li = btn.closest('li');
+            const email = li.getAttribute('data-email');
+            if (!email) return;
+            if (!confirm('Weet je zeker dat je deze deelnemer wilt verwijderen?')) return;
+            try {
+              const response = await fetch(`/activities/${encodeURIComponent(name)}/unregister?email=${encodeURIComponent(email)}`, {
+                method: 'DELETE',
+              });
+              const result = await response.json();
+              if (response.ok) {
+                fetchActivities(); // Refresh activities list
+              } else {
+                alert(result.detail || 'Kon deelnemer niet verwijderen.');
+              }
+            } catch (err) {
+              alert('Fout bij verwijderen deelnemer.');
+            }
+          });
+        });
 
         activitiesList.appendChild(activityCard);
 
@@ -62,6 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        fetchActivities(); // Refresh activities list
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
